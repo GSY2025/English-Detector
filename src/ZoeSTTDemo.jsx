@@ -7,6 +7,7 @@ export default function ZoeSTTDemo() {
   const [status, setStatus] = useState("idle");
   const [englishPercent, setEnglishPercent] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [analyzeMessage, setAnalyzeMessage] = useState("");
   const sttRef = useRef(null);
 
   // STT init
@@ -50,22 +51,49 @@ export default function ZoeSTTDemo() {
       return;
     }
     setStatus("analyzing");
+    setAnalyzeMessage("");
     try {
       const res = await fetch("/api/analyze-language", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      const j = await res.json();
+
+      // attempt to read JSON, fall back to text
+      let payload;
+      try {
+        payload = await res.json();
+      } catch {
+        payload = await res.text();
+      }
+
+      if (!res.ok) {
+        // model overloaded / unavailable
+        if (res.status === 503 || res.status === 502 || res.status === 504) {
+          setAnalyzeMessage("Model is overloaded or unavailable — please try again later.");
+          setStatus("error");
+          return;
+        }
+        // other non-OK responses
+        const details = typeof payload === "string" ? payload : JSON.stringify(payload);
+        setAnalyzeMessage(`Analyze failed (${res.status}). ${details.slice(0, 200)}`);
+        setStatus("error");
+        return;
+      }
+
+      const j = typeof payload === "object" ? payload : (() => { try { return JSON.parse(payload); } catch { return { raw: payload }; } })();
+
       if (res.ok && typeof j.percent === "number") {
         setEnglishPercent(Math.round(j.percent));
         setStatus("stopped");
+        setAnalyzeMessage("");
       } else {
-        console.error("Analyze error", j);
+        setAnalyzeMessage("Unexpected response from model. Try again later.");
         setStatus("error");
       }
     } catch (err) {
       console.error(err);
+      setAnalyzeMessage("Model unavailable — please try again later.");
       setStatus("error");
     }
   };
@@ -85,9 +113,29 @@ export default function ZoeSTTDemo() {
 
   const stopListening = () => {
     sttRef.current.stop();
+    // if there is no transcript, show message and skip analysis
+    const transcript = finalText.trim();
+    if (!transcript) {
+      setAnalyzeMessage("No transcript found. Start speaking, and click “Stop” once the final transcript appears.");
+      // keep status idle (or set to 'stopped' if you prefer)
+      setStatus("idle");
+      return;
+    }
+    setAnalyzeMessage("");
     setStatus("stopped");
-    analyzeLanguage(finalText.trim());
+    // removed automatic analysis here — now triggered by separate Analyze button
   };
+
+  // new: analyze button handler (separate from Stop)
+  const analyzeTranscript = async () => {
+     const transcript = finalText.trim();
+     if (!transcript) {
+       setAnalyzeMessage("No transcript to analyze. Please speak or record something before analyzing.");
+       return;
+     }
+     setAnalyzeMessage("");
+     await analyzeLanguage(transcript);
+   };
 
   // responsive styles generator
   const styles = (() => {
@@ -121,6 +169,8 @@ export default function ZoeSTTDemo() {
     const subtitle = { fontSize: isMobile ? 12 : 13, color: "#627d98", marginTop: 6 };
 
     const controls = { display: "flex", gap: 8, alignItems: "center" };
+    const controlsMobile = { display: "flex", gap: 8, alignItems: "center", justifyContent: "center", marginTop: 10, flexWrap: "wrap" };
+
     const btnBase = {
       padding: isMobile ? "6px 10px" : "8px 14px",
       borderRadius: 8,
@@ -132,7 +182,7 @@ export default function ZoeSTTDemo() {
     const primary = { background: "linear-gradient(90deg,#3b82f6,#06b6d4)", color: "#fff" };
     const ghost = { background: "transparent", border: "1px solid #dbe7f5", color: "#102a43" };
 
-    const statusBadge = { padding: "6px 10px", borderRadius: 999, fontSize: 13, fontWeight: 600, color: "#fff" };
+    const statusBadge = { padding: "6px 10px", borderRadius: 10, fontSize: 12, fontWeight: 600, color: "#fff" };
     const statusIdle = { background: "#9aa6b2" };
     const statusListening = { background: "#16a34a" };
     const statusAnalyzing = { background: "#f59e0b" };
@@ -158,7 +208,7 @@ export default function ZoeSTTDemo() {
     const footerNote = { fontSize: isMobile ? 11 : 12, color: "#94a3b8", marginTop: 12 };
 
     return {
-      page, card, header, title, subtitle, controls, btnBase, primary, ghost, statusBadge,
+      page, card, header, title, subtitle, controls, controlsMobile, btnBase, primary, ghost, statusBadge,
       statusIdle, statusListening, statusAnalyzing, statusError, grid, box, partialStyle,
       finalTextStyle, percentBox, circle, progressInner, progressBarWrap, progressBar, footerNote
     };
@@ -181,9 +231,50 @@ export default function ZoeSTTDemo() {
             <div style={styles.subtitle}>Starts listening, stops, and analyzes the transcript to estimate English percentage.</div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ ...statusStyle }}>{status.toUpperCase()}</div>
-            <div style={styles.controls}>
+          {/* desktop/tablet: show status + buttons aligned to right */}
+          {!isMobile && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ ...statusStyle}}>{status.toUpperCase()}</div>
+              <div style={styles.controls}>
+                <button
+                  onClick={startListening}
+                  disabled={status === "listening"}
+                  style={{ ...styles.btnBase, ...styles.primary, opacity: status === "listening" ? 0.6 : 1 }}
+                >
+                  Start
+                </button>
+
+                <button
+                  onClick={stopListening}
+                  disabled={status !== "listening"}
+                  style={{ ...styles.btnBase, ...styles.ghost, opacity: status !== "listening" ? 0.6 : 1 }}
+                >
+                  Stop
+                </button>
+
+                <button
+                  onClick={analyzeTranscript}
+                  disabled={!finalText.trim() || status === "analyzing"}
+                  style={{
+                    ...styles.btnBase,
+                    background: "linear-gradient(90deg,#06b6d4,#3b82f6)",
+                    color: "#fff",
+                    opacity: (!finalText.trim() || status === "analyzing") ? 0.6 : 1
+                  }}
+                >
+                  Analyze
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* mobile: place status + buttons below the title/subtitle */}
+        {isMobile && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 6 }}>
+
+            <div style={styles.controlsMobile}>
+              <div style={{ ...statusStyle, }}>{status.toUpperCase()}</div>
               <button
                 onClick={startListening}
                 disabled={status === "listening"}
@@ -191,6 +282,7 @@ export default function ZoeSTTDemo() {
               >
                 Start
               </button>
+
               <button
                 onClick={stopListening}
                 disabled={status !== "listening"}
@@ -198,9 +290,22 @@ export default function ZoeSTTDemo() {
               >
                 Stop
               </button>
+
+              <button
+                onClick={analyzeTranscript}
+                disabled={!finalText.trim() || status === "analyzing"}
+                style={{
+                  ...styles.btnBase,
+                  background: "linear-gradient(90deg,#06b6d4,#3b82f6)",
+                  color: "#fff",
+                  opacity: (!finalText.trim() || status === "analyzing") ? 0.6 : 1
+                }}
+              >
+                Analyze
+              </button>
             </div>
           </div>
-        </div>
+        )}
 
         <div style={styles.grid}>
           <div>
@@ -212,6 +317,9 @@ export default function ZoeSTTDemo() {
             <div style={styles.box}>
               <h4 style={{ margin: "0 0 8px 0" }}>Final Transcript</h4>
               <div style={styles.finalTextStyle}>{finalText || <span style={{ color: "#cbd5e1" }}>No transcript yet.</span>}</div>
+              {analyzeMessage ? (
+                <div style={{ marginTop: 8, color: "#b91c1c", fontSize: 13 }}>{analyzeMessage}</div>
+              ) : null}
             </div>
 
             <div style={styles.footerNote}>
