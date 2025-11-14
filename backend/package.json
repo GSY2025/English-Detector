@@ -8,6 +8,9 @@
     "dev": "nodemon server.js",
     "lint": "eslint ."
   },
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@zoe-ng/stt": "^0.1.8",
     "cors": "^2.8.5",
