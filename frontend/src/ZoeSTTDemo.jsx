@@ -62,7 +62,7 @@ export default function ZoeSTTDemo() {
     try {
       const API_URL = import.meta.env.VITE_SUPABASE_URL || "/api/analyze-language";
       const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-console.log("Analyzing via API URL:", API_URL);
+     //console.log("Analyzing via API URL:", API_URL);
 
       const res = await fetch(API_URL, {
         method: "POST",
