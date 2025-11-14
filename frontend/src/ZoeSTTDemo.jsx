@@ -60,9 +60,13 @@ export default function ZoeSTTDemo() {
     setStatus("analyzing");
     setAnalyzeMessage("");
     try {
-      const res = await fetch("/api/analyze-language", {
+      const API_URL = import.meta.env.VITE_SUPABASE_URL || "/api/analyze-language";
+      const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+console.log("Analyzing via API URL:", API_URL);
+
+      const res = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ANON_KEY}` },
         body: JSON.stringify({ text }),
       });
 
