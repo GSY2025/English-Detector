@@ -334,7 +334,7 @@ export default function ZoeSTTDemo() {
             </div>
 
             <div style={styles.footerNote}>
-              Tip: Click Stop to analyze the most recent transcript. The backend calls the model to compute the English percent.
+              Tip: Click Stop once you see the final transcript to analyze the most recent transcript. The backend calls the model to compute the English percent.
             </div>
           </div>
 
