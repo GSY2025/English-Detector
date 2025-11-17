@@ -6,6 +6,8 @@ export default function ZoeSTTDemo() {
   const [finalText, setFinalText] = useState("");
   const [status, setStatus] = useState("idle");
   const [englishPercent, setEnglishPercent] = useState(null);
+  const [improvements, setImprovements] = useState([]); // new
+  const [suggestions, setSuggestions] = useState([]);   // new
   const [isMobile, setIsMobile] = useState(false);
   const [analyzeMessage, setAnalyzeMessage] = useState("");
   const sttRef = useRef(null);
@@ -55,10 +57,15 @@ export default function ZoeSTTDemo() {
   const analyzeLanguage = async (text) => {
     if (!text || text.trim().length === 0) {
       setEnglishPercent(0);
+      setImprovements([]); // clear
+      setSuggestions([]);
       return;
     }
     setStatus("analyzing");
     setAnalyzeMessage("");
+    // clear previous analysis while new one runs
+    setImprovements([]);
+    setSuggestions("");
     try {
       const API_URL = import.meta.env.VITE_SUPABASE_URL || "/api/analyze-language";
       const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -96,6 +103,9 @@ export default function ZoeSTTDemo() {
 
       if (res.ok && typeof j.percent === "number") {
         setEnglishPercent(Math.round(j.percent));
+        // set improvements & suggestions if present
+        setImprovements(Array.isArray(j.improvements) ? j.improvements : []);
+        setSuggestions(Array.isArray(j.suggestions) ? j.suggestions : []);
         setStatus("stopped");
         setAnalyzeMessage("");
       } else {
@@ -116,6 +126,8 @@ export default function ZoeSTTDemo() {
       setPartial("");
       setFinalText("");
       setEnglishPercent(null);
+      setImprovements([]); // clear any previous analysis
+      setSuggestions([]);
     } catch (err) {
       console.error(err);
       setStatus("error");
@@ -332,6 +344,28 @@ export default function ZoeSTTDemo() {
                 <div style={{ marginTop: 8, color: "#b91c1c", fontSize: 13 }}>{analyzeMessage}</div>
               ) : null}
             </div>
+
+            {/* Improvements & Suggestions (shown after analysis) */}
+            {(improvements.length > 0 || suggestions.length > 0) && (
+              <div style={{ marginTop: 12 }}>
+                {improvements.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <h4 style={{ margin: "0 0 8px 0" }}>Improvements</h4>
+                    <ul style={{ margin: 0, paddingLeft: 18, color: "#334155", fontSize: 13 }}>
+                      {improvements.map((m, i) => <li key={i} style={{ marginBottom: 6 }}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {suggestions.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: "0 0 8px 0" }}>Suggestions</h4>
+                    <ul style={{ margin: 0, paddingLeft: 18, color: "#334155", fontSize: 13 }}>
+                      {suggestions.map((s, i) => <li key={i} style={{ marginBottom: 6 }}>{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={styles.footerNote}>
               Tip: Click Stop once you see the final transcript to analyze the most recent transcript. The backend calls the model to compute the English percent.
